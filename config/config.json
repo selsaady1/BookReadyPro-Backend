@@ -1,0 +1,29 @@
+{
+  "development": {
+    "username": "bookreadypro",
+    "password": "fvOMUO<x7nH_zf3S.-opvMGp>~w~i",
+    "database": "ebdb",
+    "host": "aa1hfqy9zn5r5ds.cw4enbv4pdi7.us-east-2.rds.amazonaws.com",
+    "dialect": "postgres"
+  },
+  "test": {
+    "username": "bookreadypro",
+    "password": "vOMUO<x7nH_zf3S.-opvMGp>~w~i",
+    "database": "ebdb",
+    "host": "aa1hfqy9zn5r5ds.cw4enbv4pdi7.us-east-2.rds.amazonaws.com",
+    "dialect": "postgres"
+  },
+  "production": {
+    "username": "bookreadypro",
+    "password": "vOMUO<x7nH_zf3S.-opvMGp>~w~i",
+    "database": "ebdb",
+    "host": "aa1hfqy9zn5r5ds.cw4enbv4pdi7.us-east-2.rds.amazonaws.com",
+    "dialect": "postgres",
+     "dialectOptions": {
+    "ssl": {
+      "require": true,
+      "rejectUnauthorized": false
+    }
+  }
+  }
+}
