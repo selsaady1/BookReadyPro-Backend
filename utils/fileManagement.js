@@ -2,7 +2,8 @@
 class AWSFiles {
 
 	constructor() {
-		this.s3 = new (require('aws-sdk/clients/s3'))()
+		const endpoint = process.env.AWS_S3_ENDPOINT;
+		this.s3 = new (require('aws-sdk/clients/s3'))(endpoint ? { endpoint, s3ForcePathStyle: true, signatureVersion: 'v4', region: process.env.AWS_REGION || 'auto' } : {})
 		
 		this.permanentBucket = process.env.SYNTHEIA_STORAGE_BUCKET || 'bookready-files';
 	}
