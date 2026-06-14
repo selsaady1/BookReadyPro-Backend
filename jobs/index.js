@@ -4,7 +4,7 @@ const user = process.env.database_user
 const host = process.env.database_host
 const password = process.env.database_password
 const database = process.env.database_name
-const boss = new PgBoss(`postgres://${user}:${password}@${host}/${database}`);
+const boss = new PgBoss({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 const axios = require('axios');
 
 const { User,File,OutputFile } = require('../models');
