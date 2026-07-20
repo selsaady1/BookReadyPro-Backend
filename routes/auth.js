@@ -30,7 +30,6 @@ router.post('/auth/register', async (ctx) => {
 
 router.post('/auth/login', async (ctx) => {
     return passport.authenticate('local', (err, user, info, status) => {
-        console.log('user', user)
         if (user) {
             ctx.login(user);
             const {name,email,credit} = user
