@@ -2,16 +2,30 @@ const Router = require('koa-router');
 const { User,File,OutputFile } = require('../models');
 const router = new Router();
 const { saveFile,deleteFile,retrieveFile,getFileStream} = require('../utils/fileManagement')
-fs = require('fs');
+const { publicFile } = require('../utils/fileStatus');
+const fs = require('fs');
 const crypto = require('crypto');
-const {boss} = require('../jobs')
+const { publishDocumentJob } = require('../jobs')
+
+function jobData(file, userId, exists) {
+    return {
+        balance_sheet: file.url,
+        name: `${file.id}-${file.name}`,
+        realName: file.name,
+        userId,
+        fileId: file.id,
+        exists,
+    };
+}
+
 router.post('/file',  async (ctx) => { 
     const user = ctx.state.user
     if( user.credit >=1){
+    let newFile = null
     try{
     const file = ctx.request.files.file
     const fileBytes = fs.readFileSync(file.path)
-    const newFile =await File.create({name:file.name,url:file.path,userId:user.id})
+    newFile = await File.create({name:file.name,url:file.path,userId:user.id})
     const filekey = `${user.id}/${newFile.id}/${file.name}`
   
     await saveFile(Buffer.from(fileBytes),filekey)
@@ -25,18 +39,23 @@ router.post('/file',  async (ctx) => {
         },
         paranoid: false
     })
-    await boss.publish('excel', { balance_sheet: filekey, name:`${newFile.id}-${file.name}`,realName:file.name,userId:user.id,fileId:newFile.id, exists:!!exists})
-    newFile.save()
+    await newFile.save()
+    const jobId = await publishDocumentJob(jobData(newFile, user.id, !!exists))
     if(!exists){
         user.credit = user.credit-1
         await user.save()
     }
 
-    ctx.body={success:true,credit:user.credit}
+    ctx.status = 202
+    ctx.body={success:true,credit:user.credit,fileId:newFile.id,jobId,status:'processing'}
     }
     catch(Err){
-        console.error('error',Err)
-        ctx.throw(401,"Problem happened")
+        console.error('[bookreadypro/upload]', Err)
+        if (newFile) {
+            newFile.error = 'The file could not be queued for processing'
+            await newFile.save().catch(() => {})
+        }
+        ctx.throw(500,"The file could not be queued for processing")
     }
 }
 else{
@@ -61,11 +80,42 @@ router.get('/files',async (ctx) => {
         ]
     })
     ctx.body= {
-       files :files,
+       files :files.map((file) => publicFile(file)),
        credit:user.credit
     }
        
     })
+
+router.post('/files/retry', async (ctx) => {
+    const user = ctx.state.user
+    const parentFileId = Number(ctx.request.body && ctx.request.body.parentFileId)
+    if (!Number.isInteger(parentFileId) || parentFileId <= 0) ctx.throw(400, 'A valid parentFileId is required')
+
+    const file = await File.findOne({
+        where: { id: parentFileId, userId: user.id },
+        include: { model: OutputFile, as: 'children' }
+    })
+    if (!file) ctx.throw(404, 'File not found')
+    const current = publicFile(file)
+    if (current.status === 'ready') {
+        ctx.body = { success: true, fileId: file.id, status: 'ready', alreadyComplete: true }
+        return
+    }
+    if (current.status === 'processing') ctx.throw(409, 'File is already processing')
+
+    file.error = null
+    await file.save()
+    try {
+        const jobId = await publishDocumentJob(jobData(file, user.id, true))
+        ctx.status = 202
+        ctx.body = { success: true, fileId: file.id, jobId, status: 'processing' }
+    } catch (error) {
+        console.error('[bookreadypro/retry]', error)
+        file.error = 'The retry could not be queued for processing'
+        await file.save().catch(() => {})
+        ctx.throw(503, 'The retry could not be queued for processing')
+    }
+})
 router.get('/download/file',async(ctx)=>{
     const user = ctx.state.user
     let { outputFileId, parentFileId} = ctx.request.query

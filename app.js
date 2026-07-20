@@ -1,4 +1,4 @@
-	const koa = require('koa')
+const koa = require('koa')
 const json = require('koa-json')
 
 const KoaRouter = require('koa-router')
@@ -15,6 +15,7 @@ const koaBody = require('koa-body');
 
 
 const app = new koa()
+const jobs = require('./jobs')
 app.keys = [process.env.SESSION_SECRET || 'dev-only-change-me']
 app.use(session({maxAge:365 * 24 * 60 * 60 * 1000}, app))
 
@@ -37,7 +38,20 @@ app.use(koaBody({
 	exposeHeaders: ['ETag', 'Cache-Control', 'If-None-Match','WWW-Authenticate', 'Server-Authorization'],
 }));
  app.use(conditional());
-app.use(etag());
+ app.use(etag());
+
+app.use(async (ctx, next) => {
+	if (ctx.method === 'GET' && ctx.path === '/health') {
+		ctx.status = jobs.isReady() ? 200 : 503
+		ctx.body = {
+			status: jobs.isReady() ? 'ok' : 'starting',
+			queue: jobs.isReady() ? 'ready' : 'starting',
+			commit: process.env.RENDER_GIT_COMMIT || null,
+		}
+		return
+	}
+	await next()
+})
 
 
 
@@ -59,6 +73,12 @@ app.use(userRoutes.routes());
 app.use(fileRoutes.routes());
 app.use(transactionRoutes.routes())
 // app.use(async ctx=> ctx.body ={ welcome:"hello "})
-const {init }=require('./jobs')
-init()
-app.listen(process.env.PORT || 8080,()=> console.log('server started .................'))
+async function start() {
+	await jobs.init()
+	app.listen(process.env.PORT || 8080, () => console.log('[bookreadypro] server started'))
+}
+
+start().catch((error) => {
+	console.error('[bookreadypro] startup failed', error)
+	process.exit(1)
+})
